@@ -1,0 +1,22 @@
+cradle:
+  direct:
+    arguments:
+      #- -ghci-script=.ghci
+      - -package time
+      - -package containers
+      - -fwarn-incomplete-patterns
+      - -fwarn-unused-binds
+      - -fwarn-unused-imports
+      - -fwarn-orphans
+      - -isrc
+      - -Wall
+      - -fno-warn-unused-binds
+      - -fno-warn-unused-do-bind
+      - -fno-warn-unused-imports
+      - -fno-warn-type-defaults
+      - -XNoImplicitPrelude
+      - -XScopedTypeVariables
+      - -XOverloadedStrings
+      - -XRebindableSyntax
+      # :l src/Course.hs src/Test/Loader.hs
+      # :m + Test.Loader
