@@ -29,6 +29,9 @@ instance A.Applicative ExactlyOne where
   pure =
     ExactlyOne
 
+-- Note: if youn implement bind, then Monad has default implementations for
+-- apply and map (see above)
+
 instance P.Monad ExactlyOne where
   (>>=) =
     flip bindExactlyOne
