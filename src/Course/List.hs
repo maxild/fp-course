@@ -33,30 +33,103 @@ import qualified Numeric as N
 -- The custom list type
 data List t =
   Nil
+-- | (:.) t (List t) <-- This is the quivalent non-infix (prefix) definition
   | t :. List t
   deriving (Eq, Ord)
 
--- Right-associative
+-- Right-associative: 0 .: 1 .: 2 .: Nil   is really   0 .: (1 .: (2 .: Nil))
 infixr 5 :.
 
 instance Show t => Show (List t) where
+  -- convert to a prelude list
   show = show . hlist
 
 -- The list of integers from zero to infinity.
-infinity ::
-  List Integer
+infinity :: List Integer
 infinity =
+  -- recursive local function that loops/recurses forever (lazy evaluation in Haskell)
   let inf x = x :. inf (x+1)
   in inf 0
 
+--
 -- functions over List that you may consider using
-foldRight :: (a -> b -> b) -> b -> List a -> b
-foldRight _ b Nil      = b
-foldRight f b (h :. t) = f h (foldRight f b t)
+--
 
+------------------------------------------------------------
+-- NOTE: We are not folding from the right, we are doing
+--          CONSTRUCTOR REPLACEMENT == foldRight
+------------------------------------------------------------
+
+--   ( ~ right associative operator semantics, just like cons (:.) and Nil )
+
+-- foldRight cons-replacement nil-replacement
+-- foldRight (+) 0 (0 :. 1 :. 2 :. Nil)
+
+-- (0 :. 1 :. 2 :. Nil)
+-- (0 + (1 + (2 + 0)))   <-- constructor replacement for right-assoc operator
+
+-- foldRight f a (0 :. 1 :. 2 :. Nil)
+-- 0 `f` (1 `f` (2 `f` a))
+-- f 0 (f 1 (f 2 a))
+
+-- foldr :: Foldable t => (a -> b -> b) -> b -> t a -> b
+-- `f` = # is some operator that is right-associative
+foldRight :: (a -> b -> b) -> b -> List a -> b
+foldRight _ acc Nil      = acc
+foldRight f acc (h :. t) = h `f` foldRight f acc t
+
+-- foldRight (:) [] (0 :. 1 :. 2 :. Nil)
+-- 0 : foldRight (:) [] (1 :. 2 :. Nil)
+-- 0 : 1 : foldRight (:) [] (2 :. Nil)
+-- 0 : 1 : 2 : foldRight (:) [] Nil
+-- 0 : 1 : 2 : []
+-- [0,1,2]
+
+-- NOTE: This module overwrites ++ and other List operators, we therefore use
+
+singleton :: t -> List t
+singleton x = x :. Nil
+
+intToString :: Int -> List Char
+intToString x = singleton (chr (ord '0' + x))
+
+-- xxx :: List Char
+-- xxx = foldRight
+--         (\x acc -> "(" ++ intToString x ++ " # " ++ acc ++ ")")
+--         "v"
+--         (0 :. 1 :. 2 :. Nil)
+-- "(0 # (1 # (2 # v)))"
+
+------------------------------------------------------------
+-- NOTE: We are not folding from the left, we are doing
+--          FOR LOOP == foldLeft    (This is not as imprtant as foldRight)
+------------------------------------------------------------
+
+-- foldl :: Foldable t => (b -> a -> b) -> b -> t a -> b
+-- (((v # x[0]) # x[1]) # x[2]) # x[3]
 foldLeft :: (b -> a -> b) -> b -> List a -> b
-foldLeft _ b Nil      = b
-foldLeft f b (h :. t) = let b' = f b h in b' `seq` foldLeft f b' t
+foldLeft _ acc Nil      = acc
+foldLeft f acc (h :. t) = let acc' = acc `f` h in acc' `seq` foldLeft f acc' t
+
+-- FOR LOOP     ( ~ left associative operator semantics )
+-- foldLeft f a xs
+
+-- // Think about it like this in C#
+-- var accum = a;
+-- foreach (var x in xs)
+--    accum = f(accum, x);
+-- return accum;
+
+-- NOTE: we have to use append (++) because we are folding left to right (appending)
+-- foldLeft (\acc x -> acc ++ singleton x) Nil (0 :. 1 :. 2 :. Nil)
+
+-- `f` = # is some operator that is left-associative
+-- yyy :: List Char
+-- yyy = foldLeft
+--         (\acc x -> "(" ++ acc ++ " # " ++ intToString x ++ ")")
+--         "v"
+--         (0 :. 1 :. 2 :. Nil)
+-- "(((v # 0) # 1) # 2)"
 
 -- END Helper functions and data types
 
@@ -169,8 +242,10 @@ filter =
   List a
   -> List a
   -> List a
-(++) =
-  error "todo: Course.List#(++)"
+xs ++ ys =
+  foldRight (:.) ys xs
+
+-- TODO: Check hvorfor...reducer
 
 infixr 5 ++
 

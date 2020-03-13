@@ -14,3 +14,5 @@
 :set -XOverloadedStrings
 :set -XRebindableSyntax
 :def test (\arg -> Prelude.return Prelude.$ Prelude.unlines [":reload", "test " Prelude.++ arg])
+:def hlint Prelude.const . Prelude.return $ ":! hlint \"src\""
+:def hoogle (\s -> Prelude.return $ ":! hoogle --count=15 \"" Prelude.++ s Prelude.++ "\"")
