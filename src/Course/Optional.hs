@@ -23,12 +23,14 @@ data Optional a =
 --
 -- >>> mapOptional (+1) (Full 8)
 -- Full 9
+
+-- `map` == <$>
 mapOptional ::
   (a -> b)
   -> Optional a
   -> Optional b
-mapOptional =
-  error "todo: Course.Optional#mapOptional"
+mapOptional g (Full x) = Full (g x)
+mapOptional _ Empty    = Empty
 
 -- | Bind the given function on the possible value.
 --
@@ -44,8 +46,9 @@ bindOptional ::
   (a -> Optional b)
   -> Optional a
   -> Optional b
-bindOptional =
-  error "todo: Course.Optional#bindOptional"
+bindOptional g (Full x) = g x
+bindOptional _ Empty = Empty
+
 
 -- | Return the possible value if it exists; otherwise, the second argument.
 --
@@ -58,8 +61,9 @@ bindOptional =
   Optional a
   -> a
   -> a
-(??) =
-  error "todo: Course.Optional#(??)"
+(Full x) ?? _ = x
+Empty    ?? x = x
+
 
 -- | Try the first optional for a value. If it has a value, use it; otherwise,
 -- use the second value.
@@ -79,8 +83,8 @@ bindOptional =
   Optional a
   -> Optional a
   -> Optional a
-(<+>) =
-  error "todo: Course.Optional#(<+>)"
+(Full x) <+> _ = Full x
+Empty    <+> x = x
 
 -- | Replaces the Full and Empty constructors in an optional.
 --
@@ -94,12 +98,16 @@ optional ::
   -> b
   -> Optional a
   -> b
-optional =
-  error "todo: Course.Optional#optional"
+optional g _ (Full a) = g a
+optional _ x Empty    = x
 
+-- `apply` == <*>
 applyOptional :: Optional (a -> b) -> Optional a -> Optional b
-applyOptional f a = bindOptional (\f' -> mapOptional f' a) f
+-- bind :: ((a -> b) -> m b) -> m (a -> b) -> m b
+--applyOptional f a = (\g -> g `mapOptional` a) `bindOptional` f
+applyOptional f a = f P.>>= (\g -> g `mapOptional` a)
 
+-- liftA2 f x y = f <$> x <*> y
 twiceOptional :: (a -> b -> c) -> Optional a -> Optional b -> Optional c
 twiceOptional f = applyOptional . mapOptional f
 
@@ -108,17 +116,12 @@ contains _ Empty = False
 contains a (Full z) = a == z
 
 instance P.Functor Optional where
-  fmap =
-    M.liftM
+  fmap = M.liftM
 
 instance A.Applicative Optional where
-  (<*>) =
-    M.ap
-  pure =
-    Full
+  (<*>) = M.ap
+  pure  = Full
 
 instance P.Monad Optional where
-  (>>=) =
-    flip bindOptional
-  return =
-    Full
+  (>>=)  = flip bindOptional
+  return = Full
