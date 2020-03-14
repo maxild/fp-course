@@ -16,6 +16,13 @@ data Optional a =
   | Empty
   deriving (Eq, Show)
 
+isEmptyOptional :: Optional a -> Bool
+isEmptyOptional (Full _) = False
+isEmptyOptional Empty    = True
+
+isNotEmptyOptional :: Optional a -> Bool
+isNotEmptyOptional = not . isEmptyOptional
+
 -- | Map the given function on the possible value.
 --
 -- >>> mapOptional (+1) Empty

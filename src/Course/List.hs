@@ -31,6 +31,7 @@ import qualified Numeric as N
 -- BEGIN Helper functions and data types
 
 -- The custom list type
+-- NOTE: This is aclled a cons-list (a singly-linked list in C#)
 data List t =
   Nil
 -- | (:.) t (List t) <-- This is the quivalent non-infix (prefix) definition
@@ -102,7 +103,7 @@ intToString x = singleton (chr (ord '0' + x))
 
 ------------------------------------------------------------
 -- NOTE: We are not folding from the left, we are doing
---          FOR LOOP == foldLeft    (This is not as imprtant as foldRight)
+--          FOR LOOP == foldLeft    (This is not as important as foldRight)
 ------------------------------------------------------------
 
 -- foldl :: Foldable t => (b -> a -> b) -> b -> t a -> b
@@ -148,8 +149,37 @@ headOr ::
   a
   -> List a
   -> a
-headOr =
-  error "todo: Course.List#headOr"
+-- headOr = foldRight (\elem acc -> elem)
+-- headOr = foldRight (\x _ -> x)
+-- const :: a -> b -> a, where const x is unary function that evaluates to x for all input
+headOr = foldRight const
+
+-- This is weird, but Haskel is evaluated in a special (no-strict) unique way
+-- Q: In what order should redex'es be reduced?
+--    1. Innermost evaluation (aka call-by-value evalution)
+--    2. Outermost evaluation (aka call-by-name evaluetion, because arguments are not
+--    evaluated before the outermost function expression needs them to be)
+-- Haskell uses call-by-name evaluation (aka lazy evaluation). This will make it
+-- possible to program with infinite structures.
+
+-- Check out the reductions performed by GHC:
+--    headOr 4 infinity
+--    foldRight const 4 infinity  <-- applying headOr (not infinity!!!!)
+--    const 0 (foldRight const 4 (1 :. infinity...)) <-- applying foldRight
+--    0    <-- applying const, because of call-by-name (Outermost) evaluation
+-- Note: because const just returns its first argument and haskell is lazy we are done
+
+-- ctor replacement
+-- foldRight (\???) a Nil
+-- => a
+
+-- foldRight (\???) a (1 :. 2 :. Nil)
+-- => (1 `f` 2 `f` a)
+-- => f 1 (f 2 a)
+
+-- Pattern Matching Solution
+-- headOr x Nil      = x
+-- headOr _ (h :. _) = h
 
 -- | The product of the elements of a list.
 --
@@ -164,8 +194,7 @@ headOr =
 product ::
   List Int
   -> Int
-product =
-  error "todo: Course.List#product"
+product = foldRight (*) 1
 
 -- | Sum the elements of the list.
 --
@@ -179,8 +208,7 @@ product =
 sum ::
   List Int
   -> Int
-sum =
-  error "todo: Course.List#sum"
+sum = foldRight (+) 0
 
 -- | Return the length of the list.
 --
@@ -191,8 +219,15 @@ sum =
 length ::
   List a
   -> Int
-length =
-  error "todo: Course.List#length"
+-- length = foldRight (\_ len -> len + 1) 0
+-- length = foldRight (const (1+)) 0
+length = foldRight (const (+1)) 0 -- I don't think this is more readable!!!
+
+-- Parametricity: By the signature 'List a -> Int' we can tell that the elements
+--                are not used, only the structure of the list.
+
+-- (+1) :: Num a => a -> a
+-- const (+1) :: Num a => b -> a -> a, where the function returns (+1) for all elements
 
 -- | Map the given function on each element of the list.
 --
@@ -202,12 +237,18 @@ length =
 -- prop> \x -> headOr x (map (+1) infinity) == 1
 --
 -- prop> \x -> map id x == x
-map ::
-  (a -> b)
-  -> List a
-  -> List b
-map =
-  error "todo: Course.List#map"
+map :: (a -> b) -> List a -> List b
+-- map f = foldRight (\x ys -> f x :. ys) Nil --  <-- The most readable, I think
+-- map f = foldRight (\x -> (f x :.)) Nil
+-- map f = foldRight (\x -> (:.) (f x)) Nil
+-- Using lambdabot (pl == pointfree)
+map f = foldRight ((:.) . f) Nil
+
+-- We deconstructing the list, and then constructing it back up
+
+-- recursive defintion
+-- map _ Nil       = Nil
+-- map f (x :. xs) = f x :. map f xs
 
 -- | Return elements satisfying the given predicate.
 --
@@ -223,8 +264,9 @@ filter ::
   (a -> Bool)
   -> List a
   -> List a
-filter =
-  error "todo: Course.List#filter"
+filter p = foldRight (\x ys -> if p x
+                               then x :. ys
+                               else ys) Nil
 
 -- | Append two lists to a new list.
 --
@@ -242,10 +284,16 @@ filter =
   List a
   -> List a
   -> List a
-xs ++ ys =
-  foldRight (:.) ys xs
+-- xs ++ ys = foldRight (:.) ys xs -- loop backwards with foldRight, because cons cannot append to the end
+-- (++) xs ys = foldRight (:.) ys xs  <-- I think this is the most readable!!!
 
--- TODO: Check hvorfor...reducer
+-- foldRight (:.) :: List t -> List -> List t, but the lists are in the wrong order
+-- flip will reverse the args of it argument function
+(++) = flip (foldRight (:.))
+
+-- We are doing ctor replacement on the first list, where
+--      Nil is repleced with second list
+--      :. is not replaced (identity)
 
 infixr 5 ++
 
@@ -262,8 +310,7 @@ infixr 5 ++
 flatten ::
   List (List a)
   -> List a
-flatten =
-  error "todo: Course.List#flatten"
+flatten = foldRight (++) Nil
 
 -- | Map a function then flatten to a list.
 --
@@ -274,13 +321,16 @@ flatten =
 --
 -- prop> \x -> headOr x (flatMap id (y :. infinity :. Nil)) == headOr 0 y
 --
--- prop> \x -> flatMap id (x :: List (List Int)) == flatten x
+-- prop> \x -> flatMap id (x :: List (List Int)) == flatten x  <-- THAT IS THE ANSWER!!!!
 flatMap ::
   (a -> List b)
   -> List a
   -> List b
-flatMap =
-  error "todo: Course.List#flatMap"
+flatMap f = flatten . map f -- join . lift f (category theory)
+-- flatMap f as = flatten (map f as)
+-- flatMap f = foldRight (\a bs -> f a ++ bs) Nil
+-- flatMap f xs = flatten (map f xs) -- bind = join . map
+
 
 -- | Flatten a list of lists to a list (again).
 -- HOWEVER, this time use the /flatMap/ function that you just wrote.
@@ -289,8 +339,11 @@ flatMap =
 flattenAgain ::
   List (List a)
   -> List a
-flattenAgain =
-  error "todo: Course.List#flattenAgain"
+flattenAgain = flatMap id -- We do not cross-world, and therefore we just flatten
+
+-- NOTES (IMPORTANT!!!! when we do Monad!!!!)
+--    We can use flatten to implement flatMap (bind)
+--    We can use flatMap (bind) to implement flatten
 
 -- | Convert a list of optional values to an optional list of values.
 --
@@ -318,7 +371,15 @@ seqOptional ::
   List (Optional a)
   -> Optional (List a)
 seqOptional =
-  error "todo: Course.List#seqOptional"
+  -- This is sequence from the Prelude t (f a) -> f (t a), where T is Traversable, M is Functor/Applicative/Monad
+  -- twiceOptional == lidtA2
+  -- foldRight (liftA2 (:.)) (pure Nil)
+  -- So we are deconstructing the list, and reconstructing the list with cons and nil that are works with Optional (lifted to the Maybe world)
+  foldRight (twiceOptional (:.)) (Full Nil) -- applicative style!!!
+
+  -- foldRight (\opt optList -> case opt of
+  --                          Full x -> mapOptional (x :.) optList
+  --                          Empty -> Empty) (Full Nil)
 
 -- | Find the first element in the list matching the predicate.
 --
@@ -340,8 +401,20 @@ find ::
   (a -> Bool)
   -> List a
   -> Optional a
-find =
-  error "todo: Course.List#find"
+-- NOTE: When predicate evalutes to true then second argument of cons function is
+--       not used, and foldRight doesn't have to construct ('loop') no more because
+--       const funcktion has become 'const' (K combinator)...see last test above
+find p = foldRight (\a o -> if p a then Full a else o) Empty
+
+-- This works, but is not as straight forward
+-- find p = foldLeft (\o a -> if isEmptyOptional o && p a
+--                              then Full a
+--                              else o)
+--                   Empty
+
+-- This one will loop forever (infinite loop), and tests would break!!
+-- find p =
+--   foldLeft (\o a -> if p a then Full a else o) Empty
 
 -- | Determine if the length of the given list is greater than 4.
 --
@@ -359,8 +432,21 @@ find =
 lengthGT4 ::
   List a
   -> Bool
-lengthGT4 =
-  error "todo: Course.List#lengthGT4"
+-- Trick is to use helper function (drop) implemented using recursion (not foldRight)
+lengthGT4 = not . isEmptyList . drop 4
+
+isEmptyList :: List t -> Bool
+isEmptyList Nil = True
+isEmptyList _   = False
+
+-- f 1 (f 2 nil)
+
+-- NOTE: remember NIL, and we can't put in the pattern
+-- lengthGT4 (_ :. _ :. _ :. _ :. _ :. _) = True
+-- lengthGT4 _                            = False
+
+-- This traverses the hole list...NOT good => infinite recursion in the tests!!!
+-- lengthGT4 xs = length xs > 4 -- BUG!!!!
 
 -- | Reverse a list.
 --
@@ -376,8 +462,7 @@ lengthGT4 =
 reverse ::
   List a
   -> List a
-reverse =
-  error "todo: Course.List#reverse"
+reverse = foldLeft (flip (:.)) Nil
 
 -- | Produce an infinite `List` that seeds with the given value at its head,
 -- then runs the given function for subsequent elements
@@ -391,7 +476,12 @@ produce ::
   (a -> a)
   -> a
   -> List a
-produce f x = x :. produce f (f x)
+produce f x = x :. produce f (f x) -- iterate from the Prelude
+
+-- produce (+1) 0
+-- 0 :. produce (+1) ((+1) 0) = 0 :. produce (+1) 1
+-- 0 :. 1 :. produce (+1) ((+1) 1) = 0 :. 1 :. produce (+1) 2
+-- etc...
 
 -- | Do anything other than reverse a list.
 -- Is it even possible?
@@ -399,14 +489,15 @@ produce f x = x :. produce f (f x)
 -- >>> notReverse Nil
 -- []
 --
--- prop> \x y -> let types = x :: List Int in notReverse x ++ notReverse y == notReverse (y ++ x)
+-- prop> \x y -> let types = x :: List Int
+--               in notReverse x ++ notReverse y == notReverse (y ++ x)
 --
--- prop> \x -> let types = x :: Int in notReverse (x :. Nil) == x :. Nil
+-- prop> \x -> let types = x :: Int
+--             in notReverse (x :. Nil) == x :. Nil
 notReverse ::
   List a
   -> List a
-notReverse =
-  error "todo: Is it even possible?"
+notReverse = reverse -- NOTE: Types (parametricity) and tests (specifications) are important!!!
 
 ---- End of list exercises
 
@@ -765,7 +856,7 @@ show' =
 
 instance P.Functor List where
   fmap f =
-    listh . P.fmap f . hlist
+    listh . P.fmap f . hlist -- TODO: why not just: fmap = map
 
 instance A.Applicative List where
   (<*>) =
