@@ -27,6 +27,8 @@ class Applicative k => Monad k where
 
 infixr 1 =<<
 
+-- TODO: Why rename Monad functions?
+
 -- | Binds a function on the ExactlyOne monad.
 --
 -- >>> (\x -> ExactlyOne(x+1)) =<< ExactlyOne 2
