@@ -11,6 +11,10 @@
 :set -fno-warn-type-defaults
 :set -XNoImplicitPrelude
 :set -XScopedTypeVariables
+-- OverloadedStrings =>
+--  1. The extension adds an IsString class and changes string literals to have type IsString a ⇒ a.
+--  2. The IsString class has a single method, fromString :: String → a, which is analogous to the
+--     fromInteger :: Integer → a method of Num that underlies integral literal overloading.
 :set -XOverloadedStrings
 :set -XRebindableSyntax
 :def test (\arg -> Prelude.return Prelude.$ Prelude.unlines [":reload", "test " Prelude.++ arg])

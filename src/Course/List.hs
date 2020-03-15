@@ -825,10 +825,12 @@ readFloat ::
 readFloat =
   mapOptional fst . readFloats
 
+-- string literals will become List Char
 instance IsString (List Char) where
   fromString =
     listh
 
+-- {Char] == String from Prelude
 type Chars =
   List Char
 
