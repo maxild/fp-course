@@ -40,6 +40,46 @@ class Functor k => Applicative k where
     -> k a
     -> k b
 
+-- NOTES:      **Combining** Effects (i.e. combining type constructors)
+-- The interesting part of applicative functor (that is not part of being only a
+-- functor) is that you can combine things. In functor you have only have map
+--
+--    map :: (a -> b) -> f a -> f b
+--
+-- and map have only one type constructor in scope. With applicative you also have
+-- apply,
+--
+--    apply :: f (a -> b) -> f a -> f b
+--
+-- and apply have two type constructors in scope. So for example for Optional/Maybe
+-- there are 4 different cases to deal with when pattern patching (deconstructing)
+--
+--    Full, Full
+--    Full, Empty
+--    Empty, Full
+--    Empty, Empty
+--
+-- For list there are an infinite number of cases. So apply have a 'combine' dimension
+-- just like a Monoid (different laws). And apply can not only short-circuit (Empty)
+-- but also combine two effects in multiple ways. That is functor is unique, while
+-- there is always at least two different applicative implementations (normal, flipped)
+-- and possibly many more (think list, cartesion product vs zip list).
+
+-- NOTES: 3 different ways to specify applicative
+--    1. pure and apply
+--    2. pure and lift2
+--    3. pure and tupled (MergeSource in F# 5)
+--
+-- lift2 ::
+--        (a -> b -> c)
+--        -> fa
+--        -> fb
+--        -> fc
+-- tupled ::         <-- This is: lift2 (,) = lift2 (\a b -> (a, b))
+--        f a
+--        -> f b
+--        -> f (a, b)  <-- MergeSources in F# 5
+
 infixl 4 <*>
 
 -- NOTE: We show here that being an Applicative Functor, you can define map
