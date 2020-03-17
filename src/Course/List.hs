@@ -73,18 +73,122 @@ infinity =
 -- 0 `f` (1 `f` (2 `f` a))
 -- f 0 (f 1 (f 2 a))
 
+-- Catamorphism = Constructor Replacement
+-- foldr: traversing and evaluating a recursive data structure like list
 -- foldr :: Foldable t => (a -> b -> b) -> b -> t a -> b
 -- `f` = # is some operator that is right-associative
 foldRight :: (a -> b -> b) -> b -> List a -> b
 foldRight _ acc Nil      = acc
-foldRight f acc (h :. t) = h `f` foldRight f acc t
+foldRight f acc (h :. t) = f h (foldRight f acc t)
 
--- foldRight (:) [] (0 :. 1 :. 2 :. Nil)
--- 0 : foldRight (:) [] (1 :. 2 :. Nil)
--- 0 : 1 : foldRight (:) [] (2 :. Nil)
--- 0 : 1 : 2 : foldRight (:) [] Nil
--- 0 : 1 : 2 : []
--- [0,1,2]
+-- NOTE about TAIL RECURSION in Haskell!!!
+
+-- > With that said, tail recursion is not that useful of a concept in a
+--   lazy language like Haskell.  The important concept to know in Haskell
+--   is 'guarded recursion', where any recursive calls occur within a data
+--   constructor (such as foldr, where the recursive call to foldr occurs
+--   as an argument to (:)).  This allows the result of the function to be
+--   consumed lazily, since it can be evaluated up to the data constructor
+--   and the recursive call delayed until needed.
+
+-- Example using Prelude "syntax"
+--     foldr (+) 0 [1,2,3]
+--  -> 1 + foldr (+) 0 [2,3]
+-- At this point, the top level (+) is going to pattern match on both its arguments.
+-- 1 is already evaluated, so there's nothing to do, while foldr (+) 0 [2,3] is not,
+-- so the pattern match inside (+) will wait on the stack while we evaluate
+-- foldr (+) 0 [2,3].
+--  -> 1 + (2 + foldr (+) 0 [3])
+--  -> 1 + (2 + (3 + foldr (+) 0 []))
+--  -> 1 + (2 + (3 + 0)) <- The stack has 3 stack frames here!!!
+
+-- foldLeft f (f acc h) t
+
+-- let acc' = f acc h in
+--            acc' `seq` foldLeft f acc' t
+
+-- Compare this to foldl (without `seq`, foldl' has seq)
+--     foldl (+) 0 [1,2,3]
+--  -> foldl (+) (0 + 1) [2,3]
+--  -> foldl (+) ((0 + 1) + 2) [3]
+--  -> foldl (+) (((0 + 1) + 2) + 3) []
+--  -> ((0 + 1) + 2) + 3
+-- 1. Up to this point, the computation will have used essentially no stack space,
+-- since the only pattern matches going on have been against lists that are already
+-- in an evaluated state.
+-- 2. But now we have built up a big expression involving lots of (+)'s and we know
+-- that it needs to pattern match both its arguments. So the outermost (...) + 3
+-- will end up waiting on the stack for ((0+1)+2) to evaluate, and so on. If the
+-- list was long to begin with, we'll again end up using lots of stack space.
+-- 3. To fix this, we need to make sure that the foldl eagerly evaluates its 'acc'
+-- argument on each step, so we don't build up the big expression in the first place.
+-- I've been assuming lazy evaluation here, but GHC, at least with optimisations
+-- turned on, is actually smarter than a plain lazy evaluator. It will figure out
+-- that it's better to make the foldl evaluate its argument as it goes (since it
+-- figures out that it's going to immediately need the result after, so there's no
+-- harm in it). Effectively, this turns plain foldl into an eagerly evaluated
+-- foldl in almost all the cases where it would be beneficial. If you're scared that
+-- this optimisation might not work, or need to run non-optimised code on large inputs,
+-- there's a variant called foldl' which explicitly forces the evaluation:
+--    foldl' f acc [] = acc
+--    foldl' f acc (x:xs) = let acc' = f acc x in seq acc' (foldl' f acc' xs)
+-- This is no longer tail recursive by some definitions, but seq is a primitive which,
+-- if the evaluation of x doesn't terminate, seq x acc' doesn't terminate, but otherwise,
+-- it's equal to acc'. This is enough to hint to the compiler that it can evaluate the
+-- let-bound acc' before recursing in the above.
+
+-- IMPORTANT:
+-- ==========
+-- So should you avoid foldr?
+-- No! In fact, foldr is perhaps more often the correct thing to use in Haskell
+-- than foldl' is, but it depends on what you're doing with the elements of the list.
+-- If you're applying a function that can't produce any of its result without pattern
+-- matching both its arguments, then definitely you want foldl'. If your combining
+-- function can produce some part of its result without needing to look at both its
+-- arguments, then foldr can short circuit.
+-- That is: foldr immediately passes control to f, and only if f needs to look at
+-- its second argument will the foldr continue.
+
+-- If you're doing something like filter:
+--     filter p = foldr (\x xs -> if p x then x:xs else xs) []
+-- or find:
+--     find p = foldr (\x m -> if p x then Just x else m) Nothing
+-- this will work on infinite or very long lists, and short circuit (in filter's case,
+-- it will only use as much of the input as needed to produce the output you asked for).
+-- By contrast, foldl on an infinite list just applies foldl to more and more complicated
+-- arguments forever, looking for the end of the list.
+--
+-- if you're writing concat:
+--    concat = foldr (++) []
+-- This is advantageous for a number of reasons -- you can begin to get output from
+-- the first list before looking at the rest and it works on infinite lists like above,
+-- but also xs ++ ys takes O(length xs) time to compute, so if you'd written a foldl,
+-- you'd be running into a quadratic time worst (and average) case.
+
+
+
+-- See hlist below (for pretty printing)
+--    foldRight (:) [] (0 :. 1 :. 2 :. Nil)
+-- -> 0 : foldRight (:) [] (1 :. 2 :. Nil)
+-- -> 0 : 1 : foldRight (:) [] (2 :. Nil)
+-- -> 0 : 1 : 2 : foldRight (:) [] Nil
+-- -> 0 : 1 : 2 : []
+-- -> [0,1,2]
+
+-- foldRight const 3 (0 :. 1 :. 2 :. 3 .: Nil)
+-- 0 `const` 1 `const` 2 `const` 3 `const` 3
+-- const 0 (const 1 (const 2 (const 3 3)))
+-- BUT const = \x _ -> x
+-- THEREFORE: const 0 ? evaluates to 0 when outermost redex is reduced
+
+-- NOTE: If replaced cons (f) can be evaluated without 'looping/recursing' over
+--       the entire list we can work with infinite list.
+-- headOr 3 infinity
+-- foldRight const 3 infinity
+-- NOTE: The deconstructing pattern matching in foldRight will drive the infinity reductions
+-- foldRight const 3 (0 :. inf 1)
+-- const 0 (foldRight const 3 (inf 1))
+-- 0
 
 -- NOTE: This module overwrites ++ and other List operators, we therefore use
 

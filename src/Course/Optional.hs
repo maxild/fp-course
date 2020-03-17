@@ -23,6 +23,14 @@ isEmptyOptional Empty    = True
 isNotEmptyOptional :: Optional a -> Bool
 isNotEmptyOptional = not . isEmptyOptional
 
+-- catamorpshism
+--
+-- This is the optional function in the course
+foldOptional :: (a -> b) -> b -> Optional a -> b
+foldOptional f _ (Full x) = f x
+foldOptional _ v Empty    = v
+
+
 -- | Map the given function on the possible value.
 --
 -- >>> mapOptional (+1) Empty
@@ -100,6 +108,7 @@ Empty    <+> x = x
 --
 -- >>> optional (+1) 0 Empty
 -- 0
+-- NOTE: This is foldOptional (catamorphism)
 optional ::
   (a -> b)
   -> b

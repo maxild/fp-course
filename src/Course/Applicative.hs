@@ -27,6 +27,11 @@ import qualified Prelude as P(fmap, return, (>>=))
 -- * The law of interchange
 --   `∀u y. u <*> pure y = pure ($ y) <*> u`
 
+--   This is called *Applicative Functor* in mathematics
+-- Applicative Functors allow sequencing of 'functorial' computations (unlike plain
+-- functors) but without deciding on which computation to perform on the basis of the
+-- result of a previous computation (unlike monads). Therefore monadic computations
+-- allow more freedom than functorial computations in the (sequencing) pipeline.
 class Functor k => Applicative k where
   pure ::
     a -> k a
@@ -36,6 +41,12 @@ class Functor k => Applicative k where
     -> k b
 
 infixl 4 <*>
+
+-- NOTE: We show here that being an Applicative Functor, you can define map
+(<$$>) :: Applicative f => (a -> b) -> f a -> f b
+(<$$>) g =
+  (pure g <*>) -- <-- This little law is used in lift=map, lift2, lift3 etc
+
 
 -- | Insert into ExactlyOne.
 --
@@ -48,13 +59,14 @@ instance Applicative ExactlyOne where
     a
     -> ExactlyOne a
   pure =
-    error "todo: Course.Applicative pure#instance ExactlyOne"
+    ExactlyOne
   (<*>) ::
     ExactlyOne (a -> b)
     -> ExactlyOne a
     -> ExactlyOne b
-  (<*>) =
-    error "todo: Course.Applicative (<*>)#instance ExactlyOne"
+  (<*>) g m =
+    -- mapExactlyOne (runExactlyOne g) m
+    runExactlyOne g <$> m
 
 -- | Insert into a List.
 --
@@ -67,13 +79,31 @@ instance Applicative List where
     a
     -> List a
   pure =
-    error "todo: Course.Applicative pure#instance List"
+    (:. Nil) -- <-- singleton list is a (pure) list with no effects (non-determinism)
   (<*>) ::
     List (a -> b)
     -> List a
     -> List b
-  (<*>) =
-    error "todo: Course.Apply (<*>)#instance List"
+  (<*>) gs as =
+    -- flatMap :: ((a -> b) -> List b) -> List (a -> b) -> List b
+    -- NOTE: bind and map can implement apply (a little law)
+    flatMap (<$> as) gs -- <-- This is the cartesion product applicative (ziplist is another)
+
+    -- -- loop over g in gs
+    -- foldLeft (\bs g ->
+    --   -- apply g to as
+    --   let gas = foldRight (\a gas' -> g a :. gas') Nil as in
+    --   -- append gas to the result list
+    --   bs ++ gas
+    --   ) Nil gs
+
+  -- This also works...
+  -- foldRight (\g bs ->
+  --   -- apply g to as
+  --   let gas = foldRight (\a gas' -> g a :. gas') Nil as in
+  --   gas ++ bs
+  --   ) Nil gs
+
 
 -- | Insert into an Optional.
 --
@@ -92,13 +122,19 @@ instance Applicative Optional where
     a
     -> Optional a
   pure =
-    error "todo: Course.Applicative pure#instance Optional"
+    Full
   (<*>) ::
     Optional (a -> b)
     -> Optional a
     -> Optional b
-  (<*>) =
-    error "todo: Course.Apply (<*>)#instance Optional"
+  (<*>) g a =
+    -- bind (<$> oa) og
+    bindOptional (flip mapOptional a) g
+    -- using pattern matching
+    -- case (g, a) of
+    --   (Full g', Full a') -> Full (g' a')
+    --   _ -> Empty
+
 
 -- | Insert into a constant function.
 --
@@ -118,21 +154,29 @@ instance Applicative Optional where
 -- 15
 --
 -- prop> \x y -> pure x y == x
+-- This is the *Reader Applicative* (aka Reader Monad)
 instance Applicative ((->) t) where
   pure ::
     a
     -> ((->) t a)
   pure =
-    error "todo: Course.Applicative pure#((->) t)"
+    const -- NOTE: pure means that lifted function does not depend on the side-effect (i.e. the environment)
+  -- m (a -> b) -> m a -> m b
   (<*>) ::
-    ((->) t (a -> b))
-    -> ((->) t a)
-    -> ((->) t b)
-  (<*>) =
-    error "todo: Course.Apply (<*>)#instance ((->) t)"
+    ((->) t (a -> b))   -- (t -> a -> b) ->
+    -> ((->) t a)       -- (t -> a)
+    -> ((->) t b)       -- (t -> b)
+  (<*>) g m t =
+    g t (m t)
+  -- Equivalent to
+  --  (<*>) g m = \t -> g t (m t)
+
+--
+-- Utility functions
+--
 
 
--- | Apply a binary function in the environment.
+-- | Apply a binary function in the environment (example: configuration).
 --
 -- >>> lift2 (+) (ExactlyOne 7) (ExactlyOne 8)
 -- ExactlyOne 15
@@ -151,14 +195,18 @@ instance Applicative ((->) t) where
 --
 -- >>> lift2 (+) length sum (listh [4,5,6])
 -- 18
+-- NOTE: lifts a function that takes 2 (pure) args and return 1 (pure) value in the
+--       "normal/pure" world into a parallel function working on 2 args wrapped in
+--       type constructors that returns 1 value wrapped in type constructor (i.e
+--       a function working in some container/context in the "effects world")
 lift2 ::
   Applicative k =>
   (a -> b -> c)
   -> k a
   -> k b
   -> k c
-lift2 =
-  error "todo: Course.Applicative#lift2"
+lift2 f x y =
+  f <$> x <*> y
 
 -- | Apply a ternary function in the environment.
 -- /can be written using `lift2` and `(<*>)`./
@@ -190,8 +238,14 @@ lift3 ::
   -> k b
   -> k c
   -> k d
-lift3 =
-  error "todo: Course.Applicative#lift3"
+lift3 f ka kb kc =
+  -- see the sequence
+  -- Q: Can arguments be applied in any order inside the context? Seems reasonable
+  -- let fbc = fabc <$> a in
+  -- let fc = fbc <*> b in
+  -- fc <*> c
+  -- f <$> ka <*> kb <*> kc
+  lift2 f ka kb <*> kc
 
 -- | Apply a quaternary function in the environment.
 -- /can be written using `lift3` and `(<*>)`./
@@ -224,8 +278,8 @@ lift4 ::
   -> k c
   -> k d
   -> k e
-lift4 =
-  error "todo: Course.Applicative#lift4"
+lift4 f x y z v =
+  lift3 f x y z <*> v
 
 -- | Apply a nullary function in the environment.
 lift0 ::
@@ -233,7 +287,7 @@ lift0 ::
   a
   -> k a
 lift0 =
-  error "todo: Course.Applicative#lift0"
+  pure
 
 -- | Apply a unary function in the environment.
 -- /can be written using `lift0` and `(<*>)`./
@@ -252,7 +306,7 @@ lift1 ::
   -> k a
   -> k b
 lift1 =
-  error "todo: Course.Applicative#lift1"
+  (<$>)
 
 -- | Apply, discarding the value of the first argument.
 -- Pronounced, right apply.
@@ -278,7 +332,10 @@ lift1 =
   -> k b
   -> k b
 (*>) =
-  error "todo: Course.Applicative#(*>)"
+  lift2 (flip const)
+  -- lift2 (\_ b -> b)
+  -- (\_ b -> b) <$> ka <*> kb
+
 
 -- | Apply, discarding the value of the second argument.
 -- Pronounced, left apply.
@@ -304,7 +361,7 @@ lift1 =
   -> k a
   -> k b
 (<*) =
-  error "todo: Course.Applicative#(<*)"
+  lift2 const
 
 -- | Sequences a list of structures to a structure of list.
 --
@@ -320,14 +377,15 @@ lift1 =
 -- >>> sequence (Full 7 :. Full 8 :. Nil)
 -- Full [7,8]
 --
--- >>> sequence ((*10) :. (+2) :. Nil) 6
+-- >>> sequence ((*10) :. (+2) :. Nil) 6 <-- BUG
 -- [60,8]
 sequence ::
   Applicative k =>
   List (k a)
   -> k (List a)
 sequence =
-  error "todo: Course.Applicative#sequence"
+  -- we are lifting cons and nil, and doing an identity fold right
+  foldRight (lift2 (:.)) (pure Nil)
 
 -- | Replicate an effect a given number of times.
 --
@@ -346,14 +404,22 @@ sequence =
 -- [10,10,10,10]
 --
 -- >>> replicateA 3 ('a' :. 'b' :. 'c' :. Nil)
+-- sequence (('a' :. 'b' :. 'c' :. Nil) :. ('a' :. 'b' :. 'c' :. Nil) :. ('a' :. 'b' :. 'c' :. Nil) :. Nil)
+-- foldRight (lift2 (:.)) (pure Nil) (('a' :. 'b' :. 'c' :. Nil) :. ('a' :. 'b' :. 'c' :. Nil) :. ('a' :. 'b' :. 'c' :. Nil) :. Nil)
+--
+-- and because lift2 cause the applicative apply/combine logic to be used we get cartesion product
+--
 -- ["aaa","aab","aac","aba","abb","abc","aca","acb","acc","baa","bab","bac","bba","bbb","bbc","bca","bcb","bcc","caa","cab","cac","cba","cbb","cbc","cca","ccb","ccc"]
 replicateA ::
   Applicative k =>
   Int
   -> k a
   -> k (List a)
-replicateA =
-  error "todo: Course.Applicative#replicateA"
+replicateA n fa =
+  -- sequence will deconstruct the list of applicatives and reconstruct it back up
+  -- using (:.) lifted to the applicative world (so Empty will dominate optional,
+  -- cartesion product for list etc)
+  sequence (replicate n fa)
 
 -- | Filter a list with a predicate that produces an effect.
 --
@@ -380,8 +446,13 @@ filtering ::
   (a -> k Bool)
   -> List a
   -> k (List a)
-filtering =
-  error "todo: Course.Applicative#filtering"
+filtering p =
+  -- lift2 (f x) :: k Bool -> k (List a) -> k (List a)
+  foldRight (\x fxs -> lift2 (f x) (p x) fxs) (pure Nil)
+  where
+    -- f :: a -> Bool -> List a -> List a
+    f x b xs =
+      if b then x :. xs else xs
 
 -----------------------
 -- SUPPORT LIBRARIES --

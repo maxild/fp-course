@@ -18,6 +18,7 @@ import qualified Prelude as P(fmap)
 --
 -- * The law of composition
 --   `∀f g x.(f . g <$> x) ≅ (f <$> (g <$> x))`  <=>  `∀f g x.(fmap (f . g) x) ≅ (fmap f (fmap g x))`
+-- This is what is called *Covariant Functor* in mathematics (because it doesn't turn around composition)
 class Functor k where -- NOTE: Why not use f (not k) for * -> * HKT?
   -- Pronounced, eff-map.
   --   "lift" a (1 -arg) function into functor world (i.e. lifting a function such
