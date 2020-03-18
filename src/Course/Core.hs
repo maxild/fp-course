@@ -111,6 +111,7 @@ ifThenElse True t _ =
 ifThenElse False _ f =
   f
 
+-- catamorphism (ternary operator in C#) from Data.Bool
 bool ::
   a
   -> a
@@ -120,3 +121,27 @@ bool f _ False =
   f
 bool _ t True =
   t
+
+-- NOTE: import Control.Arrow
+-- >>> and <<< defined for function composition
+
+-- NOTE: import Flow (if library is referenced)
+-- apply, |> , <|, compose, .>, and <.
+-- apply', !> and  <! (strict function application)
+
+-- -- << in F#
+-- (<.) :: (b -> c) -> (a -> b) -> a -> c
+-- (<.) = (.)
+
+-- -- >> in F#
+-- (.>) :: (a -> b) -> (b -> c) -> a -> c
+-- (.>) = flip (.)
+
+-- -- From F#
+-- (|>) :: a -> (a -> b) -> b
+-- (|>) x f = f x
+
+-- -- From F#
+-- (<|) :: (a -> b) -> a -> b
+-- (<|) = flip (|>) -- identical to $
+

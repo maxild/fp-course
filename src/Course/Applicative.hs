@@ -66,15 +66,16 @@ class Functor k => Applicative k where
 -- and possibly many more (think list, cartesion product vs zip list).
 
 -- NOTES: 3 different ways to specify applicative
---    1. pure and apply
---    2. pure and lift2
---    3. pure and tupled (MergeSource in F# 5)
+--    1. pure and apply                             (Type A)
+--    2. pure and lift2                             (Type B)
+--    3. pure and tupled (MergeSource in F# 5)      (Type C)
 --
 -- lift2 ::
 --        (a -> b -> c)
 --        -> fa
 --        -> fb
 --        -> fc
+--
 -- tupled ::         <-- This is: lift2 (,) = lift2 (\a b -> (a, b))
 --        f a
 --        -> f b
@@ -87,6 +88,23 @@ infixl 4 <*>
 (<$$>) g =
   (pure g <*>) -- <-- This little law is used in lift=map, lift2, lift3 etc
 
+-- TODO: It is possible to create zip3, zip4 etc
+
+-- aka zip, merge
+tupled :: Applicative f => f a -> f b -> f (a, b)
+tupled = lift2 (\a b -> (a, b))
+
+-- <*> defined in terms of tupled and <$>
+tupledApply :: Applicative f => f (a -> b) -> f a -> f b
+tupledApply f x = (\(f', x') -> f' x') <$> tupled f x
+
+-- Example impl for Optional
+tupledOptional :: Optional a -> Optional b -> Optional (a, b)
+tupledOptional (Full x) (Full y) = Full (x, y)
+tupledOptional _        _        = Empty
+
+tupledOptional' :: Optional a -> Optional b -> Optional (a, b)
+tupledOptional' = twiceOptional (,)
 
 -- | Insert into ExactlyOne.
 --
@@ -207,7 +225,7 @@ instance Applicative ((->) t) where
     -> ((->) t a)       -- (t -> a)
     -> ((->) t b)       -- (t -> b)
   (<*>) g m t =
-    g t (m t)
+    g t (m t)  -- NOTE: We are using t (the environment) twice!!!
   -- Equivalent to
   --  (<*>) g m = \t -> g t (m t)
 

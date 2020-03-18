@@ -414,7 +414,7 @@ infixr 5 ++
 flatten ::
   List (List a)
   -> List a
-flatten = foldRight (++) Nil
+flatten = foldRight (++) Nil -- <-- This is join
 
 -- | Map a function then flatten to a list.
 --
